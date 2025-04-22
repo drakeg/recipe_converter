@@ -7,15 +7,18 @@ const GroceryList = () => {
   const { user, access, refresh, login } = useContext(AuthContext);
   const [savedRecipes, setSavedRecipes] = useState([]);
   const [selectedRecipes, setSelectedRecipes] = useState([]);
+  const [availableIngredients, setAvailableIngredients] = useState([]);
   const [groceryItems, setGroceryItems] = useState([]);
   const [error, setError] = useState(null);
   const [newItem, setNewItem] = useState('');
+  const [newItemQuantity, setNewItemQuantity] = useState(1);
+  const [newItemUnit, setNewItemUnit] = useState('');
 
   // Fetch saved recipes
   useEffect(() => {
     const fetchSavedRecipes = async () => {
       try {
-        let response = await fetch('http://localhost:8000/api/recipes/saved-recipes/', {
+        let response = await fetch('/api/recipes/saved-recipes/', {
           headers: {
             'Authorization': `Bearer ${access}`
           }
@@ -23,7 +26,7 @@ const GroceryList = () => {
 
         if (!response.ok) {
           if (response.status === 401 && refresh) {
-            const refreshResponse = await fetch('http://localhost:8000/api/users/token/refresh/', {
+            const refreshResponse = await fetch('/api/users/token/refresh/', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ refresh })
@@ -33,7 +36,7 @@ const GroceryList = () => {
               const tokens = await refreshResponse.json();
               login(tokens.access, refresh);
               
-              response = await fetch('http://localhost:8000/api/recipes/saved-recipes/', {
+              response = await fetch('/api/recipes/saved-recipes/', {
                 headers: {
                   'Authorization': `Bearer ${tokens.access}`
                 }
@@ -58,42 +61,82 @@ const GroceryList = () => {
     }
   }, [user, access, refresh, login]);
 
-  // Parse ingredients and combine similar items
-  const generateGroceryList = () => {
-    const itemMap = new Map();
-
+  // Update available ingredients when recipes are selected
+  useEffect(() => {
+    const ingredients = [];
     selectedRecipes.forEach(recipeId => {
-      const recipe = savedRecipes.find(r => r.id === recipeId)?.recipe;
-      if (!recipe) return;
+      const savedRecipe = savedRecipes.find(r => r.id === recipeId);
+      if (!savedRecipe?.recipe?.converted_ingredients) return;
 
-      const ingredients = recipe.converted_ingredients.split(/\r?\n/).filter(line => line.trim()).filter(Boolean);
-      ingredients.forEach(ingredient => {
-        // Basic ingredient parsing (can be enhanced later)
-        const cleanIngredient = ingredient.trim().toLowerCase();
-        if (cleanIngredient) {
-          const amount = itemMap.get(cleanIngredient) || 0;
-          itemMap.set(cleanIngredient, amount + 1);
-        }
-      });
+      const recipeIngredients = savedRecipe.recipe.converted_ingredients
+        .split(/\r?\n/)
+        .filter(line => line.trim())
+        .map(line => {
+          const ingredient = line.trim();
+          const match = ingredient.match(/^([\d.]+)\s*([a-zA-Z]+)?\s+(.+)$/);
+          if (match) {
+            const [, quantity, unit, name] = match;
+            return {
+              id: Math.random().toString(36).substr(2, 9),
+              raw: ingredient,
+              name: name.toLowerCase(),
+              quantity: parseFloat(quantity),
+              unit: unit?.toLowerCase() || '',
+              recipe: savedRecipe.recipe.title
+            };
+          } else {
+            return {
+              id: Math.random().toString(36).substr(2, 9),
+              raw: ingredient,
+              name: ingredient.toLowerCase(),
+              quantity: 1,
+              unit: '',
+              recipe: savedRecipe.recipe.title
+            };
+          }
+        });
+      ingredients.push(...recipeIngredients);
     });
 
-    const items = Array.from(itemMap.entries()).map(([ingredient, count]) => ({
-      id: Math.random().toString(36).substr(2, 9),
-      ingredient,
-      count,
-      checked: false
-    }));
+    // Combine similar ingredients
+    const combinedIngredients = ingredients.reduce((acc, curr) => {
+      const existing = acc.find(item => 
+        item.name === curr.name && item.unit === curr.unit
+      );
+      if (existing) {
+        existing.quantity += curr.quantity;
+        existing.recipe = `${existing.recipe}, ${curr.recipe}`;
+      } else {
+        acc.push({ ...curr });
+      }
+      return acc;
+    }, []);
 
-    setGroceryItems(items);
+    setAvailableIngredients(combinedIngredients);
+  }, [selectedRecipes, savedRecipes]);
+
+  const addToGroceryList = (ingredient) => {
+    setGroceryItems(prev => [
+      ...prev,
+      {
+        ...ingredient,
+        id: Math.random().toString(36).substr(2, 9),
+        checked: false
+      }
+    ]);
   };
 
-  const toggleRecipeSelection = (recipeId) => {
-    setSelectedRecipes(prev => 
-      prev.includes(recipeId)
-        ? prev.filter(id => id !== recipeId)
-        : [...prev, recipeId]
+  const updateItemQuantity = (id, newQuantity) => {
+    setGroceryItems(prev =>
+      prev.map(item =>
+        item.id === id
+          ? { ...item, quantity: parseFloat(newQuantity) || item.quantity }
+          : item
+      )
     );
   };
+
+
 
   const toggleItemChecked = (itemId) => {
     setGroceryItems(prev =>
@@ -107,18 +150,25 @@ const GroceryList = () => {
 
   const handleAddItem = (e) => {
     e.preventDefault();
+    if (!newItem.trim()) return;
+
     const newItemObj = {
       id: Math.random().toString(36).substr(2, 9),
-      ingredient: newItem,
-      count: 1,
-      checked: false
+      name: newItem.trim().toLowerCase(),
+      quantity: parseFloat(newItemQuantity) || 1,
+      unit: newItemUnit.trim().toLowerCase(),
+      raw: `${newItemQuantity}${newItemUnit ? ' ' + newItemUnit : ''} ${newItem}`,
+      checked: false,
+      custom: true
     };
     setGroceryItems(prev => [...prev, newItemObj]);
     setNewItem('');
+    setNewItemQuantity(1);
+    setNewItemUnit('');
   };
 
-  const removeItem = (index) => {
-    setGroceryItems(prev => prev.filter((item, i) => i !== index));
+  const removeItem = (id) => {
+    setGroceryItems(prev => prev.filter(item => item.id !== id));
   };
 
   const handleRecipeSelect = (recipeId) => {
@@ -129,15 +179,7 @@ const GroceryList = () => {
     );
   };
 
-  const toggleItemCheck = (index) => {
-    setGroceryItems(prev =>
-      prev.map((item, i) =>
-        i === index
-          ? { ...item, checked: !item.checked }
-          : item
-      )
-    );
-  };
+
 
   // Group items by category
   const groupedItems = groceryItems.reduce((acc, item) => {
@@ -182,6 +224,16 @@ const GroceryList = () => {
     );
   }
 
+  if (!user?.paid_subscription) {
+    return (
+      <Container>
+        <Alert variant="warning">
+          This feature requires a paid subscription.
+        </Alert>
+      </Container>
+    );
+  }
+
   return (
     <Container>
       <h2 className="mb-4">Grocery List</h2>
@@ -196,13 +248,14 @@ const GroceryList = () => {
             <Card.Body>
               <Form>
                 {savedRecipes.map(savedRecipe => (
-                  <Form.Check
-                    key={savedRecipe.id}
-                    type="checkbox"
-                    label={savedRecipe.recipe.title || 'Untitled Recipe'}
-                    checked={selectedRecipes.includes(savedRecipe.id)}
-                    onChange={() => handleRecipeSelect(savedRecipe.id)}
-                  />
+                  <div key={savedRecipe.id} className="mb-3">
+                    <Form.Check
+                      type="checkbox"
+                      label={savedRecipe.recipe.title || 'Untitled Recipe'}
+                      checked={selectedRecipes.includes(savedRecipe.id)}
+                      onChange={() => handleRecipeSelect(savedRecipe.id)}
+                    />
+                  </div>
                 ))}
               </Form>
             </Card.Body>
@@ -210,16 +263,65 @@ const GroceryList = () => {
 
           <Card className="mt-3">
             <Card.Header>
-              <h5 className="mb-0">Add New Item</h5>
+              <h5 className="mb-0">Available Ingredients</h5>
+            </Card.Header>
+            <Card.Body>
+              <ListGroup variant="flush">
+                {availableIngredients.map((ingredient) => (
+                  <ListGroup.Item
+                    key={ingredient.id}
+                    className="d-flex justify-content-between align-items-center"
+                  >
+                    <div>
+                      <div>{ingredient.raw}</div>
+                      <small className="text-muted">From: {ingredient.recipe}</small>
+                    </div>
+                    <Button
+                      variant="outline-primary"
+                      size="sm"
+                      onClick={() => addToGroceryList(ingredient)}
+                    >
+                      <BsPlusCircle /> Add
+                    </Button>
+                  </ListGroup.Item>
+                ))}
+              </ListGroup>
+            </Card.Body>
+          </Card>
+
+          <Card className="mt-3">
+            <Card.Header>
+              <h5 className="mb-0">Add Custom Item</h5>
             </Card.Header>
             <Card.Body>
               <Form onSubmit={handleAddItem}>
+                <Row className="mb-3">
+                  <Col xs={4}>
+                    <Form.Control
+                      type="number"
+                      min="0"
+                      step="0.25"
+                      value={newItemQuantity}
+                      onChange={(e) => setNewItemQuantity(e.target.value)}
+                      placeholder="Qty"
+                    />
+                  </Col>
+                  <Col xs={8}>
+                    <Form.Control
+                      type="text"
+                      value={newItemUnit}
+                      onChange={(e) => setNewItemUnit(e.target.value)}
+                      placeholder="Unit (optional)"
+                    />
+                  </Col>
+                </Row>
                 <Form.Group className="mb-3">
                   <Form.Control
                     type="text"
                     value={newItem}
                     onChange={(e) => setNewItem(e.target.value)}
-                    placeholder="2 cups milk"
+                    placeholder="Item name"
+                    required
                   />
                 </Form.Group>
                 <Button type="submit" variant="primary" className="w-100">
@@ -232,52 +334,60 @@ const GroceryList = () => {
         </Col>
 
         <Col md={8}>
-          {categoryOrder.map(category => {
-            const items = groupedItems[category] || [];
-            if (items.length === 0) return null;
-
-            return (
-              <Card key={category} className="mb-3">
-                <Card.Header className="d-flex justify-content-between align-items-center">
-                  <h5 className="mb-0">{category}</h5>
-                  <Badge bg={categoryColors[category]}>{items.length}</Badge>
-                </Card.Header>
-                <ListGroup variant="flush">
-                  {items.map((item, index) => (
-                    <ListGroup.Item
-                      key={index}
-                      className="d-flex justify-content-between align-items-center"
+          <Card>
+            <Card.Header>
+              <h5 className="mb-0">Grocery List</h5>
+            </Card.Header>
+            <ListGroup variant="flush">
+              {groceryItems.map((item) => (
+                <ListGroup.Item
+                  key={item.id}
+                  className="d-flex justify-content-between align-items-center"
+                >
+                  <div className="d-flex align-items-center flex-grow-1">
+                    <Button
+                      variant="link"
+                      className="p-0 me-2"
+                      onClick={() => toggleItemChecked(item.id)}
                     >
+                      {item.checked ? (
+                        <BsCheck2Circle className="text-success" size={20} />
+                      ) : (
+                        <BsCircle className="text-secondary" size={20} />
+                      )}
+                    </Button>
+                    <div className={item.checked ? 'text-muted text-decoration-line-through' : ''}>
                       <div className="d-flex align-items-center">
-                        <Button
-                          variant="link"
-                          className="p-0 me-2"
-                          onClick={() => toggleItemCheck(index)}
-                        >
-                          {item.checked ? (
-                            <BsCheck2Circle className="text-success" size={20} />
-                          ) : (
-                            <BsCircle className="text-secondary" size={20} />
-                          )}
-                        </Button>
-                        <span className={item.checked ? 'text-muted text-decoration-line-through' : ''}>
-                          {item.count > 1 && `${item.count}x `}
-                          {item.ingredient}
-                        </span>
+                        <Form.Control
+                          type="number"
+                          min="0"
+                          step="0.25"
+                          value={item.quantity}
+                          onChange={(e) => updateItemQuantity(item.id, e.target.value)}
+                          className="me-2"
+                          style={{ width: '80px' }}
+                        />
+                        {item.unit && <span className="me-2">{item.unit}</span>}
+                        <span>{item.name}</span>
                       </div>
-                      <Button
-                        variant="link"
-                        className="text-danger p-0"
-                        onClick={() => removeItem(index)}
-                      >
-                        <BsTrash size={20} />
-                      </Button>
-                    </ListGroup.Item>
-                  ))}
-                </ListGroup>
-              </Card>
-            );
-          })}
+                    </div>
+                  </div>
+                  <Button
+                    variant="link"
+                    className="text-danger p-0 ms-2"
+                    onClick={() => removeItem(item.id)}
+                  >
+                    <BsTrash size={20} />
+                  </Button>
+                </ListGroup.Item>
+              ))}
+              {groceryItems.length === 0 && (
+                <ListGroup.Item className="text-center text-muted">
+                  No items in your grocery list. Select recipes to add ingredients or add custom items.
+                </ListGroup.Item>
+              )}
+            </ListGroup>
+          </Card>
         </Col>
       </Row>
     </Container>

@@ -10,7 +10,7 @@ const SavedRecipes = () => {
   useEffect(() => {
     const fetchSavedRecipes = async () => {
       try {
-        let response = await fetch('http://localhost:8000/api/recipes/saved-recipes/', {
+        let response = await fetch('/api/recipes/saved-recipes/', {
           headers: {
             'Authorization': `Bearer ${access}`
           }
@@ -30,7 +30,7 @@ const SavedRecipes = () => {
               login(tokens.access, refresh);
               
               // Retry the fetch with new token
-              response = await fetch('http://localhost:8000/api/recipes/saved-recipes/', {
+              response = await fetch('/api/recipes/saved-recipes/', {
                 headers: {
                   'Authorization': `Bearer ${tokens.access}`
                 }
@@ -61,7 +61,7 @@ const SavedRecipes = () => {
 
   const handleDelete = async (id) => {
     try {
-      let response = await fetch(`http://localhost:8000/api/recipes/saved-recipes/${id}/`, {
+      let response = await fetch(`/api/recipes/saved-recipes/${id}/`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${access}`
@@ -81,7 +81,7 @@ const SavedRecipes = () => {
           login(tokens.access, refresh);
           
           // Retry the delete with new token
-          response = await fetch(`http://localhost:8000/api/recipes/saved-recipes/${id}/`, {
+          response = await fetch(`/api/recipes/saved-recipes/${id}/`, {
             method: 'DELETE',
             headers: {
               'Authorization': `Bearer ${tokens.access}`

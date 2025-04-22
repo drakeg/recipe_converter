@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Recipe, SavedRecipe, GroceryList, GroceryItem
+from .models import Recipe, SavedRecipe, GroceryList, GroceryItem, MealPlan, MealPlanItem
 from users.serializers import UserSerializer
 
 class RecipeSerializer(serializers.ModelSerializer):
@@ -19,12 +19,20 @@ class RecipeSerializer(serializers.ModelSerializer):
 
 class SavedRecipeSerializer(serializers.ModelSerializer):
     recipe = RecipeSerializer(read_only=True)
+    recipe_id = serializers.PrimaryKeyRelatedField(
+        queryset=Recipe.objects.all(),
+        write_only=True
+    )
     user = UserSerializer(read_only=True)
 
     class Meta:
         model = SavedRecipe
-        fields = ['id', 'user', 'recipe', 'created_at', 'updated_at']
+        fields = ['id', 'user', 'recipe', 'recipe_id', 'created_at', 'updated_at']
         read_only_fields = ['user']
+
+    def create(self, validated_data):
+        recipe = validated_data.pop('recipe_id')
+        return SavedRecipe.objects.create(recipe=recipe, **validated_data)
 
 class GroceryItemSerializer(serializers.ModelSerializer):
     class Meta:
@@ -82,3 +90,26 @@ class GroceryListCreateSerializer(serializers.ModelSerializer):
             grocery_list.recipes.set(recipes)
         
         return grocery_list
+
+class MealPlanItemSerializer(serializers.ModelSerializer):
+    recipe = RecipeSerializer(read_only=True)
+    recipe_id = serializers.PrimaryKeyRelatedField(
+        queryset=Recipe.objects.all(),
+        write_only=True
+    )
+
+    class Meta:
+        model = MealPlanItem
+        fields = ['id', 'meal_plan', 'recipe', 'recipe_id', 'date', 'meal_type', 'notes', 'created_at', 'updated_at']
+
+    def create(self, validated_data):
+        recipe = validated_data.pop('recipe_id')
+        return MealPlanItem.objects.create(recipe=recipe, **validated_data)
+
+class MealPlanSerializer(serializers.ModelSerializer):
+    items = MealPlanItemSerializer(many=True, read_only=True)
+    user = UserSerializer(read_only=True)
+
+    class Meta:
+        model = MealPlan
+        fields = ['id', 'user', 'week_start', 'items', 'created_at', 'updated_at']

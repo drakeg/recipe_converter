@@ -98,3 +98,55 @@ class GroceryItem(models.Model):
             parts.append(self.unit)
         parts.append(self.ingredient)
         return ' '.join(parts)
+
+class MealPlan(models.Model):
+    MEAL_TYPE_CHOICES = [
+        ('breakfast', 'Breakfast'),
+        ('lunch', 'Lunch'),
+        ('dinner', 'Dinner'),
+        ('snack', 'Snack'),
+    ]
+
+    user: settings.AUTH_USER_MODEL = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE
+    )
+    week_start: models.DateField = models.DateField()
+    created_at: models.DateTimeField = models.DateTimeField(auto_now_add=True)
+    updated_at: models.DateTimeField = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-week_start']
+        verbose_name = 'Meal Plan'
+        verbose_name_plural = 'Meal Plans'
+        unique_together = ['user', 'week_start']
+
+    def __str__(self) -> str:
+        return f"{self.user.username}'s meal plan for week of {self.week_start}"
+
+class MealPlanItem(models.Model):
+    meal_plan: MealPlan = models.ForeignKey(
+        MealPlan,
+        on_delete=models.CASCADE,
+        related_name='items'
+    )
+    recipe: Recipe = models.ForeignKey(
+        Recipe,
+        on_delete=models.CASCADE
+    )
+    date: models.DateField = models.DateField()
+    meal_type: str = models.CharField(
+        max_length=20,
+        choices=MealPlan.MEAL_TYPE_CHOICES
+    )
+    notes: Optional[str] = models.TextField(blank=True, null=True)
+    created_at: models.DateTimeField = models.DateTimeField(auto_now_add=True)
+    updated_at: models.DateTimeField = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['date', 'meal_type']
+        verbose_name = 'Meal Plan Item'
+        verbose_name_plural = 'Meal Plan Items'
+
+    def __str__(self) -> str:
+        return f"{self.recipe.title} for {self.meal_type} on {self.date}"

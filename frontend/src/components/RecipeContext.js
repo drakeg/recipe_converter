@@ -13,7 +13,7 @@ export const RecipeProvider = ({ children }) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('http://localhost:8000/api/recipes/convert/', {
+      const response = await fetch('/api/recipes/convert/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ingredients, instructions })

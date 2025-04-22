@@ -20,7 +20,7 @@ const RecipeComparison = () => {
     }
 
     try {
-      const response = await fetch('http://localhost:8000/api/recipes/recipes/', {
+      const response = await fetch('/api/recipes/recipes/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -38,7 +38,7 @@ const RecipeComparison = () => {
       if (!response.ok) {
         if (response.status === 401 && refresh) {
           // Try to refresh the token
-          const refreshResponse = await fetch('http://localhost:8000/api/users/token/refresh/', {
+          const refreshResponse = await fetch('/api/users/token/refresh/', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ refresh })
@@ -49,7 +49,7 @@ const RecipeComparison = () => {
             login(tokens.access, refresh);
             
             // Retry the save with new token
-            const retryResponse = await fetch('http://localhost:8000/api/recipes/recipes/', {
+            const retryResponse = await fetch('/api/recipes/recipes/', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -83,14 +83,14 @@ const RecipeComparison = () => {
       const savedRecipe = await response.json();
       
       // Now save to saved_recipes
-      const saveResponse = await fetch('http://localhost:8000/api/recipes/saved-recipes/', {
+      const saveResponse = await fetch('/api/recipes/saved-recipes/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${access}`
         },
         body: JSON.stringify({
-          recipe: savedRecipe.id
+          recipe_id: savedRecipe.id
         })
       });
 

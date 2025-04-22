@@ -6,6 +6,7 @@ import RecipeInput from './components/RecipeInput';
 import RecipeComparison from './components/RecipeComparison';
 import SavedRecipes from './components/SavedRecipes';
 import GroceryList from './components/GroceryList';
+import MealPlanner from './components/MealPlanner';
 import AppNavbar from './components/Navbar';
 import { AuthProvider } from './components/AuthContext';
 import { RecipeProvider, useRecipe } from './components/RecipeContext';
@@ -59,7 +60,7 @@ function App() {
       path: "/meal-planner",
       element: (
         <Layout>
-          <div>Coming Soon: Meal Planner</div>
+          <MealPlanner />
         </Layout>
       )
     }
