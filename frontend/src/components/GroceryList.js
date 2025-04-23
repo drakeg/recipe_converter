@@ -8,11 +8,40 @@ const GroceryList = () => {
   const [savedRecipes, setSavedRecipes] = useState([]);
   const [selectedRecipes, setSelectedRecipes] = useState([]);
   const [availableIngredients, setAvailableIngredients] = useState([]);
+  const [groceryLists, setGroceryLists] = useState([]);
+  const [currentList, setCurrentList] = useState(null);
   const [groceryItems, setGroceryItems] = useState([]);
+  const [listName, setListName] = useState('');
   const [error, setError] = useState(null);
   const [newItem, setNewItem] = useState('');
   const [newItemQuantity, setNewItemQuantity] = useState(1);
   const [newItemUnit, setNewItemUnit] = useState('');
+
+  // Fetch grocery lists
+  useEffect(() => {
+    const fetchGroceryLists = async () => {
+      try {
+        const response = await fetch('/api/recipes/grocery-lists/', {
+          headers: {
+            'Authorization': `Bearer ${access}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch grocery lists');
+        }
+
+        const data = await response.json();
+        setGroceryLists(data);
+      } catch (error) {
+        setError(error.message);
+      }
+    };
+
+    if (user) {
+      fetchGroceryLists();
+    }
+  }, [user, access]);
 
   // Fetch saved recipes
   useEffect(() => {
@@ -115,37 +144,105 @@ const GroceryList = () => {
     setAvailableIngredients(combinedIngredients);
   }, [selectedRecipes, savedRecipes]);
 
-  const addToGroceryList = (ingredient) => {
-    setGroceryItems(prev => [
-      ...prev,
-      {
-        ...ingredient,
-        id: Math.random().toString(36).substr(2, 9),
-        checked: false
+  const createNewList = async () => {
+    try {
+      const response = await fetch('/api/recipes/grocery-lists/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${access}`
+        },
+        body: JSON.stringify({
+          name: listName || `Grocery List ${new Date().toLocaleDateString()}`,
+          recipe_ids: selectedRecipes
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create grocery list');
       }
-    ]);
+
+      const data = await response.json();
+      setCurrentList(data);
+      setGroceryLists(prev => [...prev, data]);
+      setGroceryItems(data.items);
+    } catch (error) {
+      setError(error.message);
+    }
   };
 
-  const updateItemQuantity = (id, newQuantity) => {
-    setGroceryItems(prev =>
-      prev.map(item =>
-        item.id === id
-          ? { ...item, quantity: parseFloat(newQuantity) || item.quantity }
-          : item
-      )
-    );
+  const addToGroceryList = async (ingredient) => {
+    if (!currentList) {
+      await createNewList();
+    }
+
+    try {
+      const response = await fetch(`/api/recipes/grocery-lists/${currentList.id}/items/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${access}`
+        },
+        body: JSON.stringify({
+          ...ingredient,
+          id: Math.random().toString(36).substr(2, 9),
+          checked: false
+        })
+      });
+    } catch (error) {
+      setError(error.message);
+    }
   };
 
+  const updateItemQuantity = async (id, newQuantity) => {
+    try {
+      const response = await fetch(`/api/recipes/grocery-items/${id}/`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${access}`
+        },
+        body: JSON.stringify({ quantity: parseFloat(newQuantity) })
+      });
 
+      if (!response.ok) {
+        throw new Error('Failed to update item quantity');
+      }
 
-  const toggleItemChecked = (itemId) => {
-    setGroceryItems(prev =>
-      prev.map(item =>
-        item.id === itemId
-          ? { ...item, checked: !item.checked }
-          : item
-      )
-    );
+      setGroceryItems(prev =>
+        prev.map(item =>
+          item.id === id ? { ...item, quantity: parseFloat(newQuantity) } : item
+        )
+      );
+    } catch (error) {
+      setError(error.message);
+    }
+  };
+
+  const toggleItemChecked = async (itemId) => {
+    try {
+      const item = groceryItems.find(i => i.id === itemId);
+      const response = await fetch(`/api/recipes/grocery-items/${itemId}/`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${access}`
+        },
+        body: JSON.stringify({ checked: !item.checked })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update item status');
+      }
+
+      setGroceryItems(prev =>
+        prev.map(item =>
+          item.id === itemId ? { ...item, checked: !item.checked } : item
+        )
+      );
+    } catch (error) {
+      setError(error.message);
+    }
   };
 
   const handleAddItem = (e) => {
@@ -167,8 +264,23 @@ const GroceryList = () => {
     setNewItemUnit('');
   };
 
-  const removeItem = (id) => {
-    setGroceryItems(prev => prev.filter(item => item.id !== id));
+  const removeItem = async (id) => {
+    try {
+      const response = await fetch(`/api/recipes/grocery-items/${id}/`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${access}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete item');
+      }
+
+      setGroceryItems(prev => prev.filter(item => item.id !== id));
+    } catch (error) {
+      setError(error.message);
+    }
   };
 
   const handleRecipeSelect = (recipeId) => {
@@ -235,10 +347,13 @@ const GroceryList = () => {
   }
 
   return (
-    <Container>
+    <Container className="mt-4">
+      {error && (
+        <Alert variant="danger" onClose={() => setError(null)} dismissible>
+          {error}
+        </Alert>
+      )}
       <h2 className="mb-4">Grocery List</h2>
-      {error && <Alert variant="danger" onClose={() => setError(null)} dismissible>{error}</Alert>}
-
       <Row className="mb-4">
         <Col md={4}>
           <Card>
@@ -334,9 +449,84 @@ const GroceryList = () => {
         </Col>
 
         <Col md={8}>
-          <Card>
+          <Card className="mb-3">
             <Card.Header>
-              <h5 className="mb-0">Grocery List</h5>
+              <h5 className="mb-0">Create or Select List</h5>
+            </Card.Header>
+            <Card.Body>
+              <Row className="align-items-end">
+                <Col md={6}>
+                  <Form.Group>
+                    <Form.Label>Create New List</Form.Label>
+                    <Form.Control
+                      type="text"
+                      value={listName}
+                      onChange={(e) => setListName(e.target.value)}
+                      placeholder="Enter list name"
+                    />
+                  </Form.Group>
+                </Col>
+                <Col md={3}>
+                  <Button 
+                    variant="primary" 
+                    onClick={createNewList}
+                    className="w-100"
+                    disabled={!listName}
+                  >
+                    Create List
+                  </Button>
+                </Col>
+                <Col md={3}>
+                  {groceryLists.length > 0 && (
+                    <Form.Select
+                      value={currentList?.id || ''}
+                      onChange={(e) => {
+                        const list = groceryLists.find(l => l.id === parseInt(e.target.value));
+                        setCurrentList(list);
+                        setGroceryItems(list.items);
+                      }}
+                    >
+                      <option value="">Select a list...</option>
+                      {groceryLists.map(list => (
+                        <option key={list.id} value={list.id}>{list.name}</option>
+                      ))}
+                    </Form.Select>
+                  )}
+                </Col>
+              </Row>
+            </Card.Body>
+          </Card>
+
+          <Card>
+            <Card.Header className="d-flex justify-content-between align-items-center">
+              <h5 className="mb-0">Grocery List {currentList && `- ${currentList.name}`}</h5>
+              {currentList && (
+                <Button
+                  variant="success"
+                  onClick={async () => {
+                    try {
+                      const response = await fetch(`/api/recipes/grocery-lists/${currentList.id}/`, {
+                        method: 'DELETE',
+                        headers: {
+                          'Authorization': `Bearer ${access}`
+                        }
+                      });
+
+                      if (!response.ok) {
+                        throw new Error('Failed to complete list');
+                      }
+
+                      setGroceryLists(prev => prev.filter(l => l.id !== currentList.id));
+                      setCurrentList(null);
+                      setGroceryItems([]);
+                    } catch (error) {
+                      setError(error.message);
+                    }
+                  }}
+                >
+                  Complete List
+                </Button>
+              )}
             </Card.Header>
             <ListGroup variant="flush">
               {groceryItems.map((item) => (
